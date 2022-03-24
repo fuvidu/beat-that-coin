@@ -22,12 +22,13 @@ describe("CandleTime library", () => {
   });
 
   describe("Minute", () => {
-    it("should work with 0 minute", async () => {
+    it("should throw for 0 minute", async () => {
       const startTime = await mockContract.getCandleStartTime(
         TimeUnit.MINUTE,
         1
       );
-      expect(startTime).to.equals(getMinuteStartTime(1));
+      await expect(mockContract.getCandleStartTime(TimeUnit.MINUTE, 0)).to.be
+        .reverted;
     });
 
     it("should work with 1 minute", async () => {

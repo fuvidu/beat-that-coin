@@ -16,7 +16,7 @@ library CandleTime {
         view
         returns (uint256)
     {
-        require(timeframe >= 0 && timeframe <= 59, "Invalid timeframe");
+        require(timeframe > 0 && timeframe <= 59, "Invalid timeframe");
         (
             uint256 year,
             uint256 month,
