@@ -90,7 +90,6 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         return true;
     }
 
-    // TODO: nonReentrant? Need to test 2 parallel transactions
     function setVoting(uint8 upOrDown)
         external
         payable
@@ -166,11 +165,11 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         _prizeShares = prizeShares;
     }
 
-    function setTimeUnit(CandleTime.TimeUnit timeUnit) public {
+    function setTimeUnit(CandleTime.TimeUnit timeUnit) public onlyOwner {
         _timeUnit = timeUnit;
     }
 
-    function setTimeframe(uint8 timeframe) public {
+    function setTimeframe(uint8 timeframe) public onlyOwner {
         require(timeframe <= 59, "Timeframe must be from 1-59");
         _timeframe = timeframe;
     }

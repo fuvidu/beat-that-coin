@@ -3,7 +3,7 @@ import { expect } from "chai";
 import { Contract } from "ethers";
 import { ethers } from "hardhat";
 import IBeatThatCoin from "./IBeatThatCoin";
-import { getMinuteStartTime, TimeUnit } from "./utils";
+import { getCandleStartTime, TimeUnit } from "./test-helpers";
 
 describe("BeatThatCoin", () => {
   let contract: IBeatThatCoin;
@@ -38,7 +38,10 @@ describe("BeatThatCoin", () => {
       const upOrDown = 1;
       await contract.setVoting(upOrDown);
       expect(
-        await contract.getVote(getMinuteStartTime(1), deployer.address)
+        await contract.getVote(
+          getCandleStartTime(TimeUnit.MINUTE, 1),
+          deployer.address
+        )
       ).to.equals(upOrDown);
     });
 
@@ -52,9 +55,9 @@ describe("BeatThatCoin", () => {
       await contract.setVoting(1);
       await contract.connect(user1).setVoting(2);
       await contract.connect(user2).setVoting(1);
-      expect(await contract.getTotalVotes(getMinuteStartTime(1))).to.be.equals(
-        3
-      );
+      expect(
+        await contract.getTotalVotes(getCandleStartTime(TimeUnit.MINUTE, 1))
+      ).to.be.equals(3);
     });
 
     // describe("when the candle time changes", async () => {

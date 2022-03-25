@@ -27,25 +27,10 @@ library CandleTime {
         ) = DateTime.timestampToDateTime(block.timestamp);
 
         if (timeUnit == TimeUnit.MINUTE) {
-            return
-                DateTime.timestampFromDateTime(
-                    year,
-                    month,
-                    day,
-                    hour,
-                    _getStartTime(minute, timeframe),
-                    0
-                );
+            minute = _getStartTimeframe(minute, timeframe);
+            second = 0;
         } else if (timeUnit == TimeUnit.SECOND) {
-            return
-                DateTime.timestampFromDateTime(
-                    year,
-                    month,
-                    day,
-                    hour,
-                    minute,
-                    _getStartTime(second, timeframe)
-                );
+            second = _getStartTimeframe(second, timeframe);
         }
 
         return
@@ -59,7 +44,7 @@ library CandleTime {
             );
     }
 
-    function _getStartTime(uint256 time, uint8 timeframe)
+    function _getStartTimeframe(uint256 time, uint8 timeframe)
         private
         pure
         returns (uint256)

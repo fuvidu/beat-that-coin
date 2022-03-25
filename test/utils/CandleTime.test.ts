@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
-import { getMinuteStartTime, TimeUnit } from "./utils";
+import { getCandleStartTime, TimeUnit } from "../test-helpers";
 import { Contract } from "ethers";
 
 interface ICandleTime extends Contract {
@@ -21,41 +21,38 @@ describe("CandleTime library", () => {
     ).deploy()) as unknown as ICandleTime;
   });
 
-  describe("Minute", () => {
-    it("should throw for 0 minute", async () => {
-      const startTime = await mockContract.getCandleStartTime(
-        TimeUnit.MINUTE,
-        1
-      );
+  // block.timestamp does not work with second timeframe?
+  describe("Minute timeframe", () => {
+    it("should throw for 0 timeframe", async () => {
       await expect(mockContract.getCandleStartTime(TimeUnit.MINUTE, 0)).to.be
         .reverted;
     });
 
-    it("should work with 1 minute", async () => {
+    it("should work with 1 timeframe", async () => {
       const startTime = await mockContract.getCandleStartTime(
         TimeUnit.MINUTE,
         1
       );
-      expect(startTime).to.equals(getMinuteStartTime(1));
+      expect(startTime).to.equals(getCandleStartTime(TimeUnit.MINUTE, 1));
     });
 
-    it("should work with 5 minutes", async () => {
+    it("should work with 5 timeframe", async () => {
       const startTime = await mockContract.getCandleStartTime(
         TimeUnit.MINUTE,
         5
       );
-      expect(startTime).to.equals(getMinuteStartTime(5));
+      expect(startTime).to.equals(getCandleStartTime(TimeUnit.MINUTE, 5));
     });
 
-    it("should work with 59 minutes", async () => {
+    it("should work with 59 timeframe", async () => {
       const startTime = await mockContract.getCandleStartTime(
         TimeUnit.MINUTE,
         59
       );
-      expect(startTime).to.equals(getMinuteStartTime(59));
+      expect(startTime).to.equals(getCandleStartTime(TimeUnit.MINUTE, 59));
     });
 
-    it("should throw error for 60 minutes", async () => {
+    it("should throw error for 60 timeframe", async () => {
       await expect(mockContract.getCandleStartTime(TimeUnit.MINUTE, 60)).to.be
         .reverted;
     });
