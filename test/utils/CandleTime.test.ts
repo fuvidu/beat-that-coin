@@ -2,10 +2,7 @@ import { ethers } from "hardhat";
 import { expect } from "chai";
 import { getCandleStartTime, TimeUnit } from "../test-helpers";
 import { Contract } from "ethers";
-
-interface ICandleTime extends Contract {
-  getCandleStartTime(timeUnit: TimeUnit, timeframe: number): number;
-}
+import { ICandleTime } from "./ICandleTime";
 
 describe("CandleTime library", () => {
   let mockContract: ICandleTime;
