@@ -10,30 +10,30 @@ import "./utils/CandleTime.sol";
 contract BeatThatCoin is Ownable, ReentrancyGuard {
     using VotingSet for VotingSet.Voting;
 
-    CandleTime.TimeUnit private _timeUnit;
-    uint8 private _timeframe;
-    address private _benificiary;
-    uint256 private _costPerVote;
-    uint8[] private _prizeShares;
-
+    CandleTime.TimeUnit public timeUnit;
+    uint8 public timeframe;
+    address public beneficiary;
+    uint256 public costPerVote;
+    uint8[] public prizeShares;
     mapping(address => uint256) private _balances;
+
     /**
      * @dev minute candleStartTime => VotingSet.Voting
      */
     mapping(uint256 => VotingSet.Voting) private _votingSet;
 
     constructor(
-        address benificiary,
-        uint256 costPerVote,
-        uint8[] memory prizeShares,
-        CandleTime.TimeUnit timeUnit,
-        uint8 timeframe
+        address beneficiary_,
+        uint256 costPerVote_,
+        uint8[] memory prizeShares_,
+        CandleTime.TimeUnit timeUnit_,
+        uint8 timeframe_
     ) {
-        setBenificiary(benificiary);
-        setCostPerVote(costPerVote);
-        setPrizeShares(prizeShares);
-        setTimeUnit(timeUnit);
-        setTimeframe(timeframe);
+        setBeneficiary(beneficiary_);
+        setCostPerVote(costPerVote_);
+        setPrizeShares(prizeShares_);
+        setTimeUnit(timeUnit_);
+        setTimeframe(timeframe_);
     }
 
     function releasePrizes(uint256 candleStartTime, uint8 winnerVote)
@@ -50,15 +50,15 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         uint8 loserVote = winnerVote == 1 ? 2 : 1;
         uint256 loserCount = voting.getVoterCount(loserVote);
         uint256 winnerCount = voting.getVoterCount(winnerVote);
-        uint256 totalPrizeAmount = _costPerVote * loserCount;
+        uint256 totalPrizeAmount = costPerVote * loserCount;
 
         // transfer to winners
         if (totalPrizeAmount > 0) {
-            for (uint8 i = 0; i < _prizeShares.length; i++) {
+            for (uint8 i = 0; i < prizeShares.length; i++) {
                 if (winnerCount <= i) {
                     break;
                 }
-                uint8 share = _prizeShares[i];
+                uint8 share = prizeShares[i];
                 address winner = voting.getVoter(winnerVote, i);
                 uint256 amount = (totalPrizeAmount * share) / 100;
                 _balances[winner] += amount;
@@ -66,9 +66,9 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
             }
         }
 
-        // transfer remaining amount to benificiary
+        // transfer remaining amount to beneficiary
         if (totalWinnerShares < 100 && totalPrizeAmount > 0) {
-            _balances[_benificiary] +=
+            _balances[beneficiary] +=
                 (totalPrizeAmount * (100 - totalWinnerShares)) /
                 100;
         }
@@ -77,8 +77,8 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         if (loserCount > 0) {
             for (uint256 i = 0; i < loserCount; i++) {
                 address loser = voting.getVoter(loserVote, i);
-                if (_balances[loser] >= _costPerVote) {
-                    _balances[loser] -= _costPerVote;
+                if (_balances[loser] >= costPerVote) {
+                    _balances[loser] -= costPerVote;
                 } else {
                     _balances[loser] = 0;
                 }
@@ -95,10 +95,10 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         validVote(upOrDown)
         returns (bool)
     {
-        require(msg.value == _costPerVote, "Cost does not match");
+        require(msg.value == costPerVote, "Cost does not match");
         uint256 candleStartTime = CandleTime.getCandleStartTime(
-            _timeUnit,
-            _timeframe
+            timeUnit,
+            timeframe
         );
         _votingSet[candleStartTime].setVoting(msg.sender, upOrDown);
         _balances[msg.sender] += msg.value;
@@ -147,30 +147,30 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         _;
     }
 
-    function setTimeUnit(CandleTime.TimeUnit timeUnit) public onlyOwner {
-        _timeUnit = timeUnit;
+    function setTimeUnit(CandleTime.TimeUnit timeUnit_) public onlyOwner {
+        timeUnit = timeUnit_;
     }
 
-    function setTimeframe(uint8 timeframe) public onlyOwner {
+    function setTimeframe(uint8 timeframe_) public onlyOwner {
         require(timeframe <= 59, "Timeframe must be from 1-59");
-        _timeframe = timeframe;
+        timeframe = timeframe_;
     }
 
-    function setBenificiary(address benificiary) public onlyOwner {
-        require(benificiary != address(0), "Invalid address");
-        _benificiary = benificiary;
+    function setBeneficiary(address beneficiary_) public onlyOwner {
+        require(beneficiary_ != address(0), "Invalid address");
+        beneficiary = beneficiary_;
     }
 
-    function setCostPerVote(uint256 costPerVote) public onlyOwner {
-        _costPerVote = costPerVote;
+    function setCostPerVote(uint256 costPerVote_) public onlyOwner {
+        costPerVote = costPerVote_;
     }
 
-    function setPrizeShares(uint8[] memory prizeShares) public onlyOwner {
+    function setPrizeShares(uint8[] memory prizeShares_) public onlyOwner {
         uint8 totalShares = 0;
-        for (uint8 i = 0; i < prizeShares.length; i++) {
-            totalShares += prizeShares[i];
+        for (uint8 i = 0; i < prizeShares_.length; i++) {
+            totalShares += prizeShares_[i];
         }
         require(totalShares <= 100, "Invalid shares");
-        _prizeShares = prizeShares;
+        prizeShares = prizeShares_;
     }
 }
