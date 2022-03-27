@@ -17,16 +17,20 @@ contract VotingSetMock {
         _voting.setPrizeReleased(released);
     }
 
+    function getVoterCount(uint8 vote) public view returns (uint256) {
+        return _voting.getVoterCount(vote);
+    }
+
     function getVoter(uint8 vote, uint256 index) public view returns (address) {
         return _voting.getVoter(vote, index);
     }
 
-    function getTotalVotes() public view returns (uint256) {
-        return _voting.getTotalVotes();
+    function getVote(address voter) public view returns (uint8) {
+        return _voting.getVote(voter);
     }
 
-    function getVoterCount(uint8 vote) public view returns (uint256) {
-        return _voting.getVoterCount(vote);
+    function getTotalVotes() public view returns (uint256) {
+        return _voting.getTotalVotes();
     }
 
     function isPrizeReleased() public view returns (bool) {

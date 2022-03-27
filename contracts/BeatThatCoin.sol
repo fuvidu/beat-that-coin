@@ -12,7 +12,6 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
 
     CandleTime.TimeUnit private _timeUnit;
     uint8 private _timeframe;
-
     address private _benificiary;
     uint256 private _costPerVote;
     uint8[] private _prizeShares;
@@ -96,6 +95,7 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         validVote(upOrDown)
         returns (bool)
     {
+        require(msg.value == _costPerVote, "Cost does not match");
         uint256 candleStartTime = CandleTime.getCandleStartTime(
             _timeUnit,
             _timeframe
@@ -147,6 +147,15 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         _;
     }
 
+    function setTimeUnit(CandleTime.TimeUnit timeUnit) public onlyOwner {
+        _timeUnit = timeUnit;
+    }
+
+    function setTimeframe(uint8 timeframe) public onlyOwner {
+        require(timeframe <= 59, "Timeframe must be from 1-59");
+        _timeframe = timeframe;
+    }
+
     function setBenificiary(address benificiary) public onlyOwner {
         require(benificiary != address(0), "Invalid address");
         _benificiary = benificiary;
@@ -163,14 +172,5 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         }
         require(totalShares <= 100, "Invalid shares");
         _prizeShares = prizeShares;
-    }
-
-    function setTimeUnit(CandleTime.TimeUnit timeUnit) public onlyOwner {
-        _timeUnit = timeUnit;
-    }
-
-    function setTimeframe(uint8 timeframe) public onlyOwner {
-        require(timeframe <= 59, "Timeframe must be from 1-59");
-        _timeframe = timeframe;
     }
 }
