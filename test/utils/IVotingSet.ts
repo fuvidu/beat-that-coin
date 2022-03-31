@@ -1,10 +1,5 @@
 import { Contract, ContractTransaction } from "ethers";
 
-export enum Vote {
-  Up = 1,
-  Down = 2,
-}
-
 export interface IVotingSet extends Contract {
   setVoting(voter: string, vote: number): Promise<ContractTransaction>;
   setPrizeReleased(released: boolean): Promise<ContractTransaction>;

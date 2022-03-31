@@ -6,7 +6,10 @@ export default interface IBeatThatCoin extends Contract {
     candleStartTime: number,
     winnerVote: number
   ): Promise<ContractTransaction>;
-  setVoting(vote: number): Promise<ContractTransaction>;
+  setVoting(
+    vote: number,
+    overrideOptions: { value: BigNumber }
+  ): Promise<ContractTransaction>;
   getTotalFunds(): Promise<BigNumber>;
   balanceOf(address: string): Promise<BigNumber>;
   withdraw(): Promise<ContractTransaction>;
@@ -22,4 +25,6 @@ export default interface IBeatThatCoin extends Contract {
   costPerVote(): Promise<BigNumber>;
   setPrizeShares(prizeShares: number[]): Promise<ContractTransaction>;
   prizeShares(index: number): Promise<number[]>;
+  pause(): Promise<ContractTransaction>;
+  unpause(): Promise<ContractTransaction>;
 }
