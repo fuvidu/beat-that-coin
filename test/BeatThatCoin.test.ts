@@ -1,6 +1,6 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { BigNumber } from "ethers";
+import { BigNumber, ContractReceipt, ContractTransaction, Event } from "ethers";
 import { ethers } from "hardhat";
 import IBeatThatCoin from "./IBeatThatCoin";
 import {
@@ -54,27 +54,54 @@ describe("BeatThatCoin", () => {
       expect(await contract.timeframe()).to.equals(TIMEFRAME);
     });
 
+    it("should not allow to set configuration when unpaused", async () => {
+      await expect(
+        contract.setBeneficiary(deployer.address)
+      ).to.not.be.revertedWith("Pausable: not paused");
+
+      await expect(contract.setCostPerVote(COST_PER_VOTE)).to.be.revertedWith(
+        "Pausable: not paused"
+      );
+
+      await expect(contract.setPrizeShares(PRIZE_SHARES)).to.be.revertedWith(
+        "Pausable: not paused"
+      );
+
+      await expect(contract.setTimeframe(TIMEFRAME)).to.be.revertedWith(
+        "Pausable: not paused"
+      );
+
+      await expect(contract.setTimeUnit(TIME_UNIT)).to.be.revertedWith(
+        "Pausable: not paused"
+      );
+    });
+
     it("should allow only owner to set configuration", async () => {
       await contract.pause();
-      await expect(contract.connect(user1).setBeneficiary(user1.address)).to.be
-        .reverted;
+      await expect(
+        contract.connect(user1).setBeneficiary(user1.address)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(contract.setBeneficiary(deployer.address)).to.not.be
         .reverted;
 
-      await expect(contract.connect(user1).setCostPerVote(COST_PER_VOTE)).to.be
-        .reverted;
+      await expect(
+        contract.connect(user1).setCostPerVote(COST_PER_VOTE)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(contract.setCostPerVote(COST_PER_VOTE)).to.not.be.reverted;
 
-      await expect(contract.connect(user1).setPrizeShares(PRIZE_SHARES)).to.be
-        .reverted;
+      await expect(
+        contract.connect(user1).setPrizeShares(PRIZE_SHARES)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(contract.setPrizeShares(PRIZE_SHARES)).to.not.be.reverted;
 
-      await expect(contract.connect(user1).setTimeframe(TIMEFRAME)).to.be
-        .reverted;
+      await expect(
+        contract.connect(user1).setTimeframe(TIMEFRAME)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(contract.setTimeframe(TIMEFRAME)).to.not.be.reverted;
 
-      await expect(contract.connect(user1).setTimeUnit(TIME_UNIT)).to.be
-        .reverted;
+      await expect(
+        contract.connect(user1).setTimeUnit(TIME_UNIT)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(contract.setTimeUnit(TIME_UNIT)).to.not.be.reverted;
       await contract.unpause();
     });
@@ -88,35 +115,50 @@ describe("BeatThatCoin", () => {
     });
 
     it("should allow multiple users to vote", async () => {
-      await contract.setVoting(Vote.Down, { value: COST_PER_VOTE });
-      await contract
-        .connect(user1)
-        .setVoting(Vote.Down, { value: COST_PER_VOTE });
-      await contract
-        .connect(user2)
-        .setVoting(Vote.Up, { value: COST_PER_VOTE });
-      const candleStartTime = getCandleStartTime(TIME_UNIT, TIMEFRAME);
-      expect(await contract.getTotalVotes(candleStartTime)).to.equals(2);
+      const results = await execute(
+        [
+          contract.setVoting(Vote.Down, { value: COST_PER_VOTE }),
+          contract
+            .connect(user1)
+            .setVoting(Vote.Down, { value: COST_PER_VOTE }),
+          contract.connect(user2).setVoting(Vote.Up, { value: COST_PER_VOTE }),
+        ],
+        "Voted"
+      );
+
+      expect(await contract.getTotalVotes(results[0][0])).to.equals(3);
       expect(await contract.getTotalFunds()).to.equals(COST_PER_VOTE.mul(3));
     });
 
     it("should return the correct vote value", async () => {
-      const candleStartTime = getCandleStartTime(TIME_UNIT, TIMEFRAME);
-      await contract.setVoting(Vote.Down, { value: COST_PER_VOTE });
-      await contract
-        .connect(user1)
-        .setVoting(Vote.Down, { value: COST_PER_VOTE });
-      await contract
-        .connect(user2)
-        .setVoting(Vote.Up, { value: COST_PER_VOTE });
-      expect(await contract.getVote(candleStartTime, user2.address)).to.equals(
+      const results = await execute(
+        [
+          contract.setVoting(Vote.Down, { value: COST_PER_VOTE }),
+          contract
+            .connect(user1)
+            .setVoting(Vote.Down, { value: COST_PER_VOTE }),
+          contract.connect(user2).setVoting(Vote.Up, { value: COST_PER_VOTE }),
+        ],
+        "Voted"
+      );
+
+      expect(await contract.getVote(results[0][0], deployer.address)).to.equals(
+        Vote.Down
+      );
+      expect(await contract.getVote(results[1][0], user1.address)).to.equals(
+        Vote.Down
+      );
+      expect(await contract.getVote(results[2][0], user2.address)).to.equals(
         Vote.Up
       );
     });
 
     it("should allow same user to vote in different timeframe", async () => {
-      const candleStartTime1 = getCandleStartTime(TIME_UNIT, TIMEFRAME);
-      await contract.setVoting(Vote.Down, { value: COST_PER_VOTE });
+      const results1 = await execute(
+        [contract.setVoting(Vote.Down, { value: COST_PER_VOTE })],
+        "Voted"
+      );
+      const candleStartTime1 = results1[0][0];
 
       await wait(10 * 1000);
 
@@ -125,8 +167,11 @@ describe("BeatThatCoin", () => {
       await contract.setTimeframe(10);
       await contract.unpause();
 
-      const candleStartTime2 = getCandleStartTime(TimeUnit.SECOND, 10);
-      await contract.setVoting(Vote.Up, { value: COST_PER_VOTE });
+      const results2 = await execute(
+        [contract.setVoting(Vote.Up, { value: COST_PER_VOTE })],
+        "Voted"
+      );
+      const candleStartTime2 = results2[0][0];
 
       expect(await contract.balanceOf(deployer.address)).to.equals(
         COST_PER_VOTE.mul(2)
@@ -146,35 +191,40 @@ describe("BeatThatCoin", () => {
         address: string;
         balance: BigNumber;
       };
-      const candleStartTime = getCandleStartTime(TIME_UNIT, TIMEFRAME);
       const users = await ethers.getSigners();
       const beneficiary = users[1].address;
       const balanceOfBeneficiary = await contract.balanceOf(beneficiary);
       await contract.pause();
       await contract.setBeneficiary(beneficiary);
       await contract.unpause();
-      const votes: { [key: number]: UserBalance[] } = {};
+
       // skip the deployer and the beneficiary
+      const requests = [];
       for (let i = 2; i < Math.max(users.length, 10); i++) {
         const vote = arrayRandomValue([Vote.Up, Vote.Down]);
         const user = users[i];
-        await contract.connect(user).setVoting(vote, {
-          value: COST_PER_VOTE,
-        });
+        requests.push(
+          contract.connect(user).setVoting(vote, {
+            value: COST_PER_VOTE,
+          })
+        );
+      }
+      const results = await execute(requests, "Voted");
+
+      // Balance of users before release
+      const votes: { [key: number]: UserBalance[] } = {};
+      for (const result of results) {
+        const voter = result[1];
+        const vote = result[2];
 
         if (!votes[vote]) {
-          votes[vote] = [
-            {
-              address: user.address,
-              balance: await contract.balanceOf(user.address),
-            },
-          ];
-        } else {
-          votes[vote].push({
-            address: user.address,
-            balance: await contract.balanceOf(user.address),
-          });
+          votes[vote] = [];
         }
+
+        votes[vote].push({
+          address: voter,
+          balance: await contract.balanceOf(voter),
+        });
       }
 
       const winnerVote = arrayRandomValue([Vote.Up, Vote.Down]);
@@ -182,14 +232,16 @@ describe("BeatThatCoin", () => {
       const losers = votes[loserVote];
       const totalPrizeValue = COST_PER_VOTE.mul(losers.length);
 
+      const candleStartTime = results[0][0];
       await contract.releasePrizes(candleStartTime, winnerVote);
-      const winners = votes[winnerVote];
+
+      const notLosers = votes[winnerVote];
       let winnerShares = 0;
       for (let j = 0; j < PRIZE_SHARES.length; j++) {
         const share = PRIZE_SHARES[j];
         winnerShares += share;
         const amount = totalPrizeValue.mul(share).div(100);
-        const winner = winners[j];
+        const winner = notLosers[j];
         expect(await contract.balanceOf(winner.address)).to.equals(
           winner.balance.add(amount)
         );
@@ -207,36 +259,42 @@ describe("BeatThatCoin", () => {
         address: string;
         balance: BigNumber;
       };
-      const candleStartTime = getCandleStartTime(TIME_UNIT, TIMEFRAME);
       const users = await ethers.getSigners();
-      const votes: { [key: number]: UserBalance[] } = {};
+
       // skip the deployer and the beneficiary
+      const requests = [];
       for (let i = 2; i < Math.max(users.length, 10); i++) {
         const vote = arrayRandomValue([Vote.Up, Vote.Down]);
         const user = users[i];
-        await contract.connect(user).setVoting(vote, {
-          value: COST_PER_VOTE,
-        });
+        requests.push(
+          contract.connect(user).setVoting(vote, {
+            value: COST_PER_VOTE,
+          })
+        );
+      }
+      const results = await execute(requests, "Voted");
+
+      // Balance of users before release
+      const votes: { [key: number]: UserBalance[] } = {};
+      for (const result of results) {
+        const voter = result[1];
+        const vote = result[2];
 
         if (!votes[vote]) {
-          votes[vote] = [
-            {
-              address: user.address,
-              balance: await contract.balanceOf(user.address),
-            },
-          ];
-        } else {
-          votes[vote].push({
-            address: user.address,
-            balance: await contract.balanceOf(user.address),
-          });
+          votes[vote] = [];
         }
+
+        votes[vote].push({
+          address: voter,
+          balance: await contract.balanceOf(voter),
+        });
       }
 
       const winnerVote = arrayRandomValue([Vote.Up, Vote.Down]);
       const loserVote = winnerVote === Vote.Up ? Vote.Down : Vote.Up;
       const losers = votes[loserVote];
 
+      const candleStartTime = results[0][0];
       await contract.releasePrizes(candleStartTime, winnerVote);
 
       for (let i = 0; i < losers.length; i++) {
@@ -252,35 +310,41 @@ describe("BeatThatCoin", () => {
         address: string;
         balance: BigNumber;
       };
-      const candleStartTime = getCandleStartTime(TIME_UNIT, TIMEFRAME);
       const users = await ethers.getSigners();
-      const votes: { [key: number]: UserBalance[] } = {};
+
       // skip the deployer and the beneficiary
+      const requests1 = [];
       for (let i = 2; i < Math.max(users.length, 10); i++) {
         const vote = arrayRandomValue([Vote.Up, Vote.Down]);
         const user = users[i];
-        await contract.connect(user).setVoting(vote, {
-          value: COST_PER_VOTE,
-        });
+        requests1.push(
+          contract.connect(user).setVoting(vote, {
+            value: COST_PER_VOTE,
+          })
+        );
+      }
+      const results = await execute(requests1, "Voted");
+
+      // Balance of users before release
+      const votes: { [key: number]: UserBalance[] } = {};
+      for (const result of results) {
+        const voter = result[1];
+        const vote = result[2];
 
         if (!votes[vote]) {
-          votes[vote] = [
-            {
-              address: user.address,
-              balance: await contract.balanceOf(user.address),
-            },
-          ];
-        } else {
-          votes[vote].push({
-            address: user.address,
-            balance: await contract.balanceOf(user.address),
-          });
+          votes[vote] = [];
         }
+
+        votes[vote].push({
+          address: voter,
+          balance: await contract.balanceOf(voter),
+        });
       }
 
       const winnerVote = arrayRandomValue([Vote.Up, Vote.Down]);
       const notLosers = votes[winnerVote];
 
+      const candleStartTime = results[0][0];
       await contract.releasePrizes(candleStartTime, winnerVote);
 
       for (let i = PRIZE_SHARES.length; i < notLosers.length; i++) {
@@ -292,15 +356,22 @@ describe("BeatThatCoin", () => {
     });
 
     it("should not allow to release the same candle twice", async () => {
-      const candleStartTime = getCandleStartTime(TIME_UNIT, TIMEFRAME);
       const users = await ethers.getSigners();
+
+      // skip the deployer and the beneficiary
+      const requests = [];
       for (let i = 2; i < Math.max(users.length, 10); i++) {
         const vote = arrayRandomValue([Vote.Up, Vote.Down]);
         const user = users[i];
-        await contract.connect(user).setVoting(vote, {
-          value: COST_PER_VOTE,
-        });
+        requests.push(
+          contract.connect(user).setVoting(vote, {
+            value: COST_PER_VOTE,
+          })
+        );
       }
+      const results = await execute(requests, "Voted");
+      const candleStartTime = results[0][0];
+
       await contract.releasePrizes(candleStartTime, Vote.Up);
       await expect(
         contract.releasePrizes(candleStartTime, Vote.Up)
@@ -308,15 +379,23 @@ describe("BeatThatCoin", () => {
     });
 
     it("should allow to release prizes on different candles", async () => {
-      const candleStartTime1 = getCandleStartTime(TIME_UNIT, TIMEFRAME);
       const users = await ethers.getSigners();
+
+      // skip the deployer and the beneficiary
+      const requests1 = [];
       for (let i = 2; i < Math.max(users.length, 10); i++) {
         const vote = arrayRandomValue([Vote.Up, Vote.Down]);
         const user = users[i];
-        await contract.connect(user).setVoting(vote, {
-          value: COST_PER_VOTE,
-        });
+        requests1.push(
+          contract.connect(user).setVoting(vote, {
+            value: COST_PER_VOTE,
+          })
+        );
       }
+
+      const results1 = await execute(requests1, "Voted");
+      const candleStartTime1 = results1[0][0];
+
       await contract.releasePrizes(candleStartTime1, Vote.Up);
 
       await wait(10000);
@@ -324,18 +403,41 @@ describe("BeatThatCoin", () => {
       await contract.setTimeUnit(TimeUnit.SECOND);
       await contract.setTimeframe(10);
       await contract.unpause();
+
+      const requests2 = [];
       for (let i = 2; i < Math.max(users.length, 10); i++) {
         const vote = arrayRandomValue([Vote.Up, Vote.Down]);
         const user = users[i];
-        await contract.connect(user).setVoting(vote, {
-          value: COST_PER_VOTE,
-        });
+        requests2.push(
+          contract.connect(user).setVoting(vote, {
+            value: COST_PER_VOTE,
+          })
+        );
       }
-      const candleStartTime2 = getCandleStartTime(TimeUnit.SECOND, 10);
+      const results2 = await execute(requests2, "Voted");
+      const candleStartTime2 = results2[0][0];
+
       await expect(contract.releasePrizes(candleStartTime2, Vote.Down)).to.not
         .be.reverted;
     });
   });
 
-  describe("Withdraw", () => {});
+  // TODO
+  //describe("Withdraw", () => {});
 });
+
+async function execute(
+  calls: Promise<ContractTransaction>[],
+  eventName: string
+) {
+  const results: ContractTransaction[] = await Promise.all(calls);
+  const receipts: ContractReceipt[] = await Promise.all(
+    results.map((result) => result.wait())
+  );
+  return receipts.map((receipt) => {
+    const event = receipt.events?.find(
+      (event: Event) => event.event === eventName
+    );
+    return event?.args ? event?.args : [];
+  });
+}

@@ -20,6 +20,14 @@ contract BeatThatCoin is Pausable, Ownable, ReentrancyGuard {
     uint8[] public prizeShares;
     mapping(address => uint256) private _balances;
 
+    event Voted(uint256 indexed time, address voter, uint8 vote);
+    event PrizesReleased(
+        uint256 indexed time,
+        address[] winners,
+        uint8 winnerVote
+    );
+    event Withdrawn(address payee, uint256 amount);
+
     /**
      * @dev minute candleStartTime => VotingSet.Voting
      */
@@ -61,6 +69,8 @@ contract BeatThatCoin is Pausable, Ownable, ReentrancyGuard {
 
         voting.setPrizeReleased(true);
 
+        address[] memory winners = new address[](prizeShares.length);
+
         // transfer to winners
         if (totalPrizeAmount > 0) {
             for (uint8 i = 0; i < prizeShares.length; i++) {
@@ -72,6 +82,7 @@ contract BeatThatCoin is Pausable, Ownable, ReentrancyGuard {
                 uint256 amount = (totalPrizeAmount * share) / 100;
                 _balances[winner] += amount;
                 totalWinnerShares += share;
+                winners[i] = winner;
             }
         }
 
@@ -95,6 +106,8 @@ contract BeatThatCoin is Pausable, Ownable, ReentrancyGuard {
             }
         }
 
+        emit PrizesReleased(candleStartTime, winners, winnerVote);
+
         return true;
     }
 
@@ -110,9 +123,9 @@ contract BeatThatCoin is Pausable, Ownable, ReentrancyGuard {
             timeUnit,
             timeframe
         );
-
         _votingSet[candleStartTime].setVoting(msg.sender, vote);
         _balances[msg.sender] += msg.value;
+        emit Voted({time: candleStartTime, voter: msg.sender, vote: vote});
         return true;
     }
 
@@ -130,10 +143,10 @@ contract BeatThatCoin is Pausable, Ownable, ReentrancyGuard {
                 getTotalFunds() >= _balances[msg.sender],
             "Insufficient funds"
         );
-        (bool successful, ) = payable(msg.sender).call{
-            value: _balances[msg.sender]
-        }("");
+        uint256 amount = _balances[msg.sender];
+        (bool successful, ) = payable(msg.sender).call{value: amount}("");
         require(successful, "Failed to widthraw");
+        emit Withdrawn(msg.sender, amount);
         return true;
     }
 
