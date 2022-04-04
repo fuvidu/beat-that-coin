@@ -4,72 +4,91 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "./utils/VotingSet.sol";
 import "./utils/CandleTime.sol";
 
-contract BeatThatCoin is Ownable, ReentrancyGuard {
+import "hardhat/console.sol";
+
+contract BeatThatCoin is Pausable, Ownable, ReentrancyGuard {
     using VotingSet for VotingSet.Voting;
 
-    CandleTime.TimeUnit private _timeUnit;
-    uint8 private _timeframe;
-
-    address private _benificiary;
-    uint256 private _costPerVote;
-    uint8[] private _prizeShares;
-
+    CandleTime.TimeUnit public timeUnit;
+    uint8 public timeframe;
+    address public beneficiary;
+    uint256 public costPerVote;
+    uint8[] public prizeShares;
     mapping(address => uint256) private _balances;
+
+    event Voted(uint256 indexed time, address voter, uint8 vote);
+    event PrizesReleased(
+        uint256 indexed time,
+        address[] winners,
+        uint8 winnerVote
+    );
+    event Withdrawn(address payee, uint256 amount);
+
     /**
      * @dev minute candleStartTime => VotingSet.Voting
      */
     mapping(uint256 => VotingSet.Voting) private _votingSet;
 
     constructor(
-        address benificiary,
-        uint256 costPerVote,
-        uint8[] memory prizeShares,
-        CandleTime.TimeUnit timeUnit,
-        uint8 timeframe
+        address beneficiary_,
+        uint256 costPerVote_,
+        uint8[] memory prizeShares_,
+        CandleTime.TimeUnit timeUnit_,
+        uint8 timeframe_
     ) {
-        setBenificiary(benificiary);
-        setCostPerVote(costPerVote);
-        setPrizeShares(prizeShares);
-        setTimeUnit(timeUnit);
-        setTimeframe(timeframe);
+        _pause();
+        setBeneficiary(beneficiary_);
+        setCostPerVote(costPerVote_);
+        setPrizeShares(prizeShares_);
+        setTimeUnit(timeUnit_);
+        setTimeframe(timeframe_);
+        _unpause();
     }
 
     function releasePrizes(uint256 candleStartTime, uint8 winnerVote)
         external
-        validVote(winnerVote)
+        whenNotPaused
         onlyOwner
         nonReentrant
+        validVote(winnerVote)
         returns (bool)
     {
         VotingSet.Voting storage voting = _votingSet[candleStartTime];
         require(voting.isPrizeReleased() == false, "Prizes already released");
 
         uint8 totalWinnerShares = 0;
+        // TODO: replace fixed value with enum
         uint8 loserVote = winnerVote == 1 ? 2 : 1;
         uint256 loserCount = voting.getVoterCount(loserVote);
         uint256 winnerCount = voting.getVoterCount(winnerVote);
-        uint256 totalPrizeAmount = _costPerVote * loserCount;
+        uint256 totalPrizeAmount = costPerVote * loserCount;
+
+        voting.setPrizeReleased(true);
+
+        address[] memory winners = new address[](prizeShares.length);
 
         // transfer to winners
         if (totalPrizeAmount > 0) {
-            for (uint8 i = 0; i < _prizeShares.length; i++) {
+            for (uint8 i = 0; i < prizeShares.length; i++) {
                 if (winnerCount <= i) {
                     break;
                 }
-                uint8 share = _prizeShares[i];
+                uint8 share = prizeShares[i];
                 address winner = voting.getVoter(winnerVote, i);
                 uint256 amount = (totalPrizeAmount * share) / 100;
                 _balances[winner] += amount;
                 totalWinnerShares += share;
+                winners[i] = winner;
             }
         }
 
-        // transfer remaining amount to benificiary
+        // transfer remaining amount to beneficiary
         if (totalWinnerShares < 100 && totalPrizeAmount > 0) {
-            _balances[_benificiary] +=
+            _balances[beneficiary] +=
                 (totalPrizeAmount * (100 - totalWinnerShares)) /
                 100;
         }
@@ -78,34 +97,39 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         if (loserCount > 0) {
             for (uint256 i = 0; i < loserCount; i++) {
                 address loser = voting.getVoter(loserVote, i);
-                if (_balances[loser] >= _costPerVote) {
-                    _balances[loser] -= _costPerVote;
+                if (_balances[loser] >= costPerVote) {
+                    _balances[loser] -= costPerVote;
                 } else {
+                    // TODO: does this case ever happen?
                     _balances[loser] = 0;
                 }
             }
         }
 
-        voting.setPrizeReleased(true);
+        emit PrizesReleased(candleStartTime, winners, winnerVote);
+
         return true;
     }
 
-    function setVoting(uint8 upOrDown)
+    function setVoting(uint8 vote)
         external
         payable
-        validVote(upOrDown)
+        whenNotPaused
+        validVote(vote)
         returns (bool)
     {
+        require(msg.value == costPerVote, "Cost does not match");
         uint256 candleStartTime = CandleTime.getCandleStartTime(
-            _timeUnit,
-            _timeframe
+            timeUnit,
+            timeframe
         );
-        _votingSet[candleStartTime].setVoting(msg.sender, upOrDown);
+        _votingSet[candleStartTime].setVoting(msg.sender, vote);
         _balances[msg.sender] += msg.value;
+        emit Voted({time: candleStartTime, voter: msg.sender, vote: vote});
         return true;
     }
 
-    function getTotalFunds() public view onlyOwner returns (uint256) {
+    function getTotalFunds() public view returns (uint256) {
         return address(this).balance;
     }
 
@@ -113,16 +137,16 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         return _balances[owner];
     }
 
-    function withdraw() external nonReentrant returns (bool) {
+    function withdraw() external whenNotPaused nonReentrant returns (bool) {
         require(
             _balances[msg.sender] > 0 &&
                 getTotalFunds() >= _balances[msg.sender],
             "Insufficient funds"
         );
-        (bool successful, ) = payable(msg.sender).call{
-            value: _balances[msg.sender]
-        }("");
+        uint256 amount = _balances[msg.sender];
+        (bool successful, ) = payable(msg.sender).call{value: amount}("");
         require(successful, "Failed to widthraw");
+        emit Withdrawn(msg.sender, amount);
         return true;
     }
 
@@ -147,30 +171,46 @@ contract BeatThatCoin is Ownable, ReentrancyGuard {
         _;
     }
 
-    function setBenificiary(address benificiary) public onlyOwner {
-        require(benificiary != address(0), "Invalid address");
-        _benificiary = benificiary;
+    function setTimeUnit(CandleTime.TimeUnit timeUnit_)
+        public
+        whenPaused
+        onlyOwner
+    {
+        timeUnit = timeUnit_;
     }
 
-    function setCostPerVote(uint256 costPerVote) public onlyOwner {
-        _costPerVote = costPerVote;
+    function setTimeframe(uint8 timeframe_) public whenPaused onlyOwner {
+        require(timeframe <= 59, "Timeframe must be from 1-59");
+        timeframe = timeframe_;
     }
 
-    function setPrizeShares(uint8[] memory prizeShares) public onlyOwner {
+    function setBeneficiary(address beneficiary_) public onlyOwner {
+        require(beneficiary_ != address(0), "Invalid address");
+        beneficiary = beneficiary_;
+    }
+
+    function setCostPerVote(uint256 costPerVote_) public whenPaused onlyOwner {
+        costPerVote = costPerVote_;
+    }
+
+    function setPrizeShares(uint8[] memory prizeShares_)
+        public
+        whenPaused
+        onlyOwner
+    {
         uint8 totalShares = 0;
-        for (uint8 i = 0; i < prizeShares.length; i++) {
-            totalShares += prizeShares[i];
+        for (uint8 i = 0; i < prizeShares_.length; i++) {
+            totalShares += prizeShares_[i];
         }
         require(totalShares <= 100, "Invalid shares");
-        _prizeShares = prizeShares;
+        prizeShares = prizeShares_;
     }
 
-    function setTimeUnit(CandleTime.TimeUnit timeUnit) public onlyOwner {
-        _timeUnit = timeUnit;
+    function pause() public onlyOwner {
+        _pause();
     }
 
-    function setTimeframe(uint8 timeframe) public onlyOwner {
-        require(timeframe <= 59, "Timeframe must be from 1-59");
-        _timeframe = timeframe;
+    function unpause() public onlyOwner {
+        _unpause();
     }
 }
