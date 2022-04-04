@@ -27,6 +27,8 @@ async function main() {
     TIMEFRAME
   )) as unknown as IBeatThatCoin;
   await contract.deployed();
+
+  console.log("BeatThatCoin is deployed to: ", contract.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
