@@ -31,11 +31,21 @@ function getStartTimeframe(time: number, timeframe: number): number {
   return remainder === 0 ? time : time - remainder;
 }
 
-export function wait(delay: number): Promise<any> {
-  return new Promise((resolve) => setTimeout(resolve, delay));
+export function wait(milliseconds: number): Promise<any> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+export function arrayRandomValue(array: number[]): number {
+  return array[Math.floor(Math.random() * array.length)];
 }
 
 export enum TimeUnit {
   SECOND = 1,
   MINUTE = 2,
+}
+
+export enum Vote {
+  None = 0,
+  Up = 1,
+  Down = 2,
 }
